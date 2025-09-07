@@ -26,7 +26,7 @@ jobs:
           
           # 如果安装过程中出现依赖问题，运行以下命令修复：
           sudo apt-get -f install
-         echo ""
+          echo ""
           echo "🌐 获取官方镜像列表..."
           MIRRORS=$(wget -qO- mirrors.ubuntu.com/mirrors.txt)
           MIRROR_COUNT=$(echo "$MIRRORS" | wc -l)
