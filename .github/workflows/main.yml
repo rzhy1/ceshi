@@ -20,7 +20,7 @@ jobs:
       - name: Find and configure fastest Ubuntu mirror
         run: |
           # 安装 netselect（如果系统默认没有）
-          sudo apt update && sudo apt install netselect -y
+          sudo apt update && sudo apt install netselect netselect-apt netselect-ng -y
           # 获取镜像列表并测试，取第一个（最快）的镜像
           FASTEST_MIRROR=$(netselect -s 1 -t 20 $(wget -qO - mirrors.ubuntu.com/mirrors.txt) | awk '{print $2}')
           echo "Fastest mirror found: $FASTEST_MIRROR"
