@@ -15,22 +15,41 @@ jobs:
   build:
     runs-on: ubuntu-24.04
     steps:
-      - name: 🚀 测试并显示最快的 Ubuntu 源（使用 curl 测速）
+      - name: 📦 使用指定方式安装 netselect（仅保留，实际不依赖）
+        run: |
+          echo "📦 仍按要求安装 netselect（但后续测试改用 curl）..."
+          wget -q http://ftp.de.debian.org/debian/pool/main/n/netselect/netselect_0.3.ds1-29_amd64.deb
+          sudo dpkg -i netselect_0.3.ds1-29_amd64.deb || true
+          sudo apt-get -f install -y
+
+      - name: 🚀 测试并显示最快的 Ubuntu 源（使用 curl + 内置镜像列表）
         run: |
           echo "⏳ 准备测试环境..."
 
-          echo ""
-          echo "🌐 获取官方镜像列表（强制获取完整列表）..."
-          MIRRORS=$(wget -qO- "http://mirrors.ubuntu.com/AD.txt")
-          MIRROR_COUNT=$(echo "$MIRRORS" | wc -l)
-          echo "🔍 共获取到 $MIRROR_COUNT 个镜像源，开始测试..."
+          # ✅ 手动定义镜像列表（全球 + 国内高速源）
+          # 来源：官方推荐 + 清华、阿里、中科大、上交等国内高校/企业镜像
+          MIRRORS=$(cat <<EOF
+http://archive.ubuntu.com/ubuntu/
+http://mirrors.aliyun.com/ubuntu/
+http://mirrors.tuna.tsinghua.edu.cn/ubuntu/
+http://mirrors.ustc.edu.cn/ubuntu/
+http://mirror.sjtu.edu.cn/ubuntu/
+http://mirrors.zju.edu.cn/ubuntu/
+http://mirrors.bfsu.edu.cn/ubuntu/
+http://mirror.lzu.edu.cn/ubuntu/
+http://mirror.hust.edu.cn/ubuntu/
+http://mirror.bjtu.edu.cn/ubuntu/
+http://ftp.jaist.ac.jp/pub/Linux/ubuntu/
+http://ftp.iij.ad.jp/pub/linux/ubuntu/
+http://mirror.navercorp.com/ubuntu/
+http://mirror.enzu.com/ubuntu/
+http://mirror.math.princeton.edu/pub/ubuntu/
+http://ubuntu.mirror.constant.com/
+EOF
+          )
 
-          if [ "$MIRROR_COUNT" -lt 2 ]; then
-            echo "⚠️  镜像列表过少，补充常用快速镜像..."
-            MIRRORS=$(echo -e "$MIRRORS\nhttp://mirrors.aliyun.com/ubuntu/\nhttp://mirrors.tuna.tsinghua.edu.cn/ubuntu/\nhttp://mirror.sjtu.edu.cn/ubuntu/")
-            MIRROR_COUNT=$(echo "$MIRRORS" | wc -l)
-            echo "📌 补充后共 $MIRROR_COUNT 个镜像源。"
-          fi
+          MIRROR_COUNT=$(echo "$MIRRORS" | wc -l)
+          echo "🔍 使用内置镜像列表，共 $MIRROR_COUNT 个镜像源，开始测试..."
 
           echo ""
           echo "📋 镜像源列表："
@@ -44,15 +63,14 @@ jobs:
 
           # 逐个测试
           while IFS= read -r url; do
-            if [ -z "$url" ]; then continue; fi
+            [ -z "$url" ] && continue
             # 提取主机名用于显示
             host=$(echo "$url" | sed -E 's|https?://([^/]+).*|\1|')
-            # 测试首页或 /README 响应时间（轻量）
+            # 测试轻量文件（避免下载大文件）
             test_url="${url%/}/README"
-            time_total=$(curl -w "%{time_total}" -o /dev/null -s --connect-timeout 10 --max-time 20 "$test_url" 2>/dev/null || echo "999.999")
-            if [ "$time_total" = "0.000" ] || [ -z "$time_total" ]; then
-              time_total="999.999"
-            fi
+            time_total=$(curl -w "%{time_total}" -o /dev/null -s --connect-timeout 8 --max-time 15 "$test_url" 2>/dev/null || echo "999.999")
+            # 防止 0.000 误判
+            [ "$time_total" = "0.000" ] && time_total="999.999"
             printf "%.3f   %s\n" "$time_total" "$host" >> "$TEMP_RESULTS"
             echo "  → $host : ${time_total}s"
           done <<< "$MIRRORS"
@@ -60,7 +78,7 @@ jobs:
           # 按响应时间排序
           echo ""
           echo "📊 测试结果（响应时间，单位：秒，越小越好）："
-          sort -n "$TEMP_RESULTS" | head -n 10 | awk '{printf "%7s   %s\n", $1, $2}'
+          sort -n "$TEMP_RESULTS" | head -n 15 | awk '{printf "%7s   %s\n", $1, $2}'
 
           FASTEST=$(sort -n "$TEMP_RESULTS" | head -n1 | awk '{print $2}')
 
@@ -71,9 +89,9 @@ jobs:
           echo "## 🏆 最快 Ubuntu 镜像源测试报告（HTTP 响应测速）" >> $GITHUB_STEP_SUMMARY
           echo "**最终选择 → \`$FASTEST\`**" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### 📊 详细测试结果（前10名）" >> $GITHUB_STEP_SUMMARY
+          echo "### 📊 详细测试结果（前15名）" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
-          sort -n "$TEMP_RESULTS" | head -n 10 | awk '{printf "%7s   %s\n", $1, $2}' >> $GITHUB_STEP_SUMMARY
+          sort -n "$TEMP_RESULTS" | head -n 15 | awk '{printf "%7s   %s\n", $1, $2}' >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
 
           # 清理
