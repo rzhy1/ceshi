@@ -15,13 +15,6 @@ jobs:
   build:
     runs-on: ubuntu-24.04
     steps:
-      - name: 📦 使用指定方式安装 netselect（仅保留，实际不依赖）
-        run: |
-          echo "📦 仍按要求安装 netselect（但后续测试改用 curl）..."
-          wget -q http://ftp.de.debian.org/debian/pool/main/n/netselect/netselect_0.3.ds1-29_amd64.deb
-          sudo dpkg -i netselect_0.3.ds1-29_amd64.deb || true
-          sudo apt-get -f install -y
-
       - name: 🚀 测试并显示最快的 Ubuntu 源（使用 curl + 内置镜像列表）
         env:
           MIRRORS: |
