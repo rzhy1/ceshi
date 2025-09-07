@@ -19,15 +19,13 @@ jobs:
     steps:
       - name: Find and configure fastest Ubuntu mirror
         run: |
-          # 安装 netselect（如果系统默认没有）
-          sudo apt-get update
+          wget http://ftp.de.debian.org/debian/pool/main/n/netselect/netselect_0.3.ds1-29_amd64.deb
 
-          # 确保启用了 universe 仓库
-          sudo add-apt-repository universe
-          sudo apt-get update
+          # 安装下载的包
+          sudo dpkg -i netselect_0.3.ds1-29_amd64.deb
           
-          # 再次尝试安装 netselect
-          sudo apt-get install -y netselect
+          # 如果安装过程中出现依赖问题，运行以下命令修复：
+          sudo apt-get -f install
           # 获取镜像列表并测试，取第一个（最快）的镜像
           FASTEST_MIRROR=$(netselect -s 1 -t 20 $(wget -qO - mirrors.ubuntu.com/mirrors.txt) | awk '{print $2}')
           echo "Fastest mirror found: $FASTEST_MIRROR"
