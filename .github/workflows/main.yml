@@ -1,35 +1,23 @@
 name: "测试"
-#dsafghj
+
 on:
   workflow_dispatch:
   push:
-    branches:
-      - "*"
+    branches: ["*"]
   pull_request:
-    branches:
-      - "*"
+    branches: ["*"]
   release:
-    types:
-      - released
+    types: [released]
   schedule:
     - cron: "0 0 * * *"
+
 jobs:
   build:
     runs-on: ubuntu-24.04
     steps:
-      - name: Find and configure fastest Ubuntu mirror
-        run: |
-          wget http://ftp.de.debian.org/debian/pool/main/n/netselect/netselect_0.3.ds1-29_amd64.deb
-
-          # 安装下载的包
-          sudo dpkg -i netselect_0.3.ds1-29_amd64.deb
-          
-          # 如果安装过程中出现依赖问题，运行以下命令修复：
-          sudo apt-get -f install
-      - name: 🚀 测试并显示最快的 Ubuntu 源（含完整过程）
+      - name: 🚀 测试并显示最快的 Ubuntu 源（使用 curl 测速）
         run: |
           echo "⏳ 准备测试环境..."
-          # ✅ wget 是系统预装的，无需安装
 
           echo ""
           echo "🌐 获取官方镜像列表（强制获取完整列表）..."
@@ -49,37 +37,44 @@ jobs:
           echo "$MIRRORS" | nl
 
           echo ""
-          echo "⏱️  正在测试速度（评分越低越好，超时 20 秒）..."
-          HOSTS=$(echo "$MIRRORS" | sed -E 's|https?://([^/]+).*|\1|' | sort -u | grep -v '^$')
+          echo "⏱️  正在测试 HTTP 响应速度（越小越快）..."
 
-          if [ -z "$HOSTS" ]; then
-            echo "❌ 未提取到有效主机名"
-            exit 1
-          fi
+          # 创建临时文件存储结果
+          TEMP_RESULTS=$(mktemp)
 
-          RESULT=$(echo "$HOSTS" | xargs -n1 echo | netselect -s 5 -t 20 2>/dev/null || true)
+          # 逐个测试
+          while IFS= read -r url; do
+            if [ -z "$url" ]; then continue; fi
+            # 提取主机名用于显示
+            host=$(echo "$url" | sed -E 's|https?://([^/]+).*|\1|')
+            # 测试首页或 /README 响应时间（轻量）
+            test_url="${url%/}/README"
+            time_total=$(curl -w "%{time_total}" -o /dev/null -s --connect-timeout 10 --max-time 20 "$test_url" 2>/dev/null || echo "999.999")
+            if [ "$time_total" = "0.000" ] || [ -z "$time_total" ]; then
+              time_total="999.999"
+            fi
+            printf "%.3f   %s\n" "$time_total" "$host" >> "$TEMP_RESULTS"
+            echo "  → $host : ${time_total}s"
+          done <<< "$MIRRORS"
 
-          if [ -z "$RESULT" ]; then
-            echo "⚠️  所有镜像测试失败或超时，可能受网络限制。"
-            FASTEST="archive.ubuntu.com"
-          else
-            echo ""
-            echo "📊 测试结果（评分 越小越快）："
-            echo "$RESULT" | awk '{printf "%4d   %s\n", $1, $2}'
-            FASTEST=$(echo "$RESULT" | head -n1 | awk '{print $2}')
-          fi
+          # 按响应时间排序
+          echo ""
+          echo "📊 测试结果（响应时间，单位：秒，越小越好）："
+          sort -n "$TEMP_RESULTS" | head -n 10 | awk '{printf "%7s   %s\n", $1, $2}'
+
+          FASTEST=$(sort -n "$TEMP_RESULTS" | head -n1 | awk '{print $2}')
 
           echo ""
           echo "✅ 最快的源是: $FASTEST"
 
-          echo "## 🏆 最快 Ubuntu 镜像源测试报告" >> $GITHUB_STEP_SUMMARY
+          # 写入 Job Summary
+          echo "## 🏆 最快 Ubuntu 镜像源测试报告（HTTP 响应测速）" >> $GITHUB_STEP_SUMMARY
           echo "**最终选择 → \`$FASTEST\`**" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          if [ -n "$RESULT" ]; then
-            echo "### 📊 详细测试结果（评分越低越快）" >> $GITHUB_STEP_SUMMARY
-            echo '```' >> $GITHUB_STEP_SUMMARY
-            echo "$RESULT" | awk '{printf "%4d   %s\n", $1, $2}' >> $GITHUB_STEP_SUMMARY
-            echo '```' >> $GITHUB_STEP_SUMMARY
-          else
-            echo "> ⚠️ 所有测试失败，使用默认源 \`archive.ubuntu.com\`" >> $GITHUB_STEP_SUMMARY
-          fi
+          echo "### 📊 详细测试结果（前10名）" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          sort -n "$TEMP_RESULTS" | head -n 10 | awk '{printf "%7s   %s\n", $1, $2}' >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+          # 清理
+          rm -f "$TEMP_RESULTS"
