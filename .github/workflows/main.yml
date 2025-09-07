@@ -1,4 +1,4 @@
-name: "测试"
+name: "测试 Ubuntu 镜像速度"
 
 on:
   workflow_dispatch:
@@ -23,30 +23,26 @@ jobs:
           sudo apt-get -f install -y
 
       - name: 🚀 测试并显示最快的 Ubuntu 源（使用 curl + 内置镜像列表）
+        env:
+          MIRRORS: |
+            http://archive.ubuntu.com/ubuntu/
+            http://mirrors.aliyun.com/ubuntu/
+            http://mirrors.tuna.tsinghua.edu.cn/ubuntu/
+            http://mirrors.ustc.edu.cn/ubuntu/
+            http://mirror.sjtu.edu.cn/ubuntu/
+            http://mirrors.zju.edu.cn/ubuntu/
+            http://mirrors.bfsu.edu.cn/ubuntu/
+            http://mirror.lzu.edu.cn/ubuntu/
+            http://mirror.hust.edu.cn/ubuntu/
+            http://mirror.bjtu.edu.cn/ubuntu/
+            http://ftp.jaist.ac.jp/pub/Linux/ubuntu/
+            http://ftp.iij.ad.jp/pub/linux/ubuntu/
+            http://mirror.navercorp.com/ubuntu/
+            http://mirror.enzu.com/ubuntu/
+            http://mirror.math.princeton.edu/pub/ubuntu/
+            http://ubuntu.mirror.constant.com/
         run: |
           echo "⏳ 准备测试环境..."
-
-          # ✅ 手动定义镜像列表（全球 + 国内高速源）
-          # 来源：官方推荐 + 清华、阿里、中科大、上交等国内高校/企业镜像
-          MIRRORS=$(cat <<EOF
-http://archive.ubuntu.com/ubuntu/
-http://mirrors.aliyun.com/ubuntu/
-http://mirrors.tuna.tsinghua.edu.cn/ubuntu/
-http://mirrors.ustc.edu.cn/ubuntu/
-http://mirror.sjtu.edu.cn/ubuntu/
-http://mirrors.zju.edu.cn/ubuntu/
-http://mirrors.bfsu.edu.cn/ubuntu/
-http://mirror.lzu.edu.cn/ubuntu/
-http://mirror.hust.edu.cn/ubuntu/
-http://mirror.bjtu.edu.cn/ubuntu/
-http://ftp.jaist.ac.jp/pub/Linux/ubuntu/
-http://ftp.iij.ad.jp/pub/linux/ubuntu/
-http://mirror.navercorp.com/ubuntu/
-http://mirror.enzu.com/ubuntu/
-http://mirror.math.princeton.edu/pub/ubuntu/
-http://ubuntu.mirror.constant.com/
-EOF
-          )
 
           MIRROR_COUNT=$(echo "$MIRRORS" | wc -l)
           echo "🔍 使用内置镜像列表，共 $MIRROR_COUNT 个镜像源，开始测试..."
@@ -64,13 +60,24 @@ EOF
           # 逐个测试
           while IFS= read -r url; do
             [ -z "$url" ] && continue
-            # 提取主机名用于显示
             host=$(echo "$url" | sed -E 's|https?://([^/]+).*|\1|')
-            # 测试轻量文件（避免下载大文件）
             test_url="${url%/}/README"
-            time_total=$(curl -w "%{time_total}" -o /dev/null -s --connect-timeout 8 --max-time 15 "$test_url" 2>/dev/null || echo "999.999")
-            # 防止 0.000 误判
-            [ "$time_total" = "0.000" ] && time_total="999.999"
+
+            # 获取原始响应时间
+            raw_time=$(curl -w "%{time_total}" -o /dev/null -s --connect-timeout 8 --max-time 15 "$test_url" 2>/dev/null)
+
+            # 判断是否有效
+            if [ $? -ne 0 ] || [ -z "$raw_time" ] || [ "$(echo "$raw_time >= 15" | bc -l)" -eq 1 ] || [ "$(echo "$raw_time <= 0" | bc -l)" -eq 1 ]; then
+              time_total="999.999"
+            else
+              # 格式化为 3 位小数
+              time_total=$(printf "%.3f" "$raw_time" 2>/dev/null || echo "999.999")
+              # 验证格式是否正确
+              if ! echo "$time_total" | grep -E "^[0-9]+\.[0-9]{3}$" >/dev/null; then
+                time_total="999.999"
+              fi
+            fi
+
             printf "%.3f   %s\n" "$time_total" "$host" >> "$TEMP_RESULTS"
             echo "  → $host : ${time_total}s"
           done <<< "$MIRRORS"
