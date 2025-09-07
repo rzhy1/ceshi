@@ -26,17 +26,47 @@ jobs:
           
           # 如果安装过程中出现依赖问题，运行以下命令修复：
           sudo apt-get -f install
-          # 获取镜像列表并测试最快的一个
-          FASTEST=$(wget -qO- mirrors.ubuntu.com/mirrors.txt | xargs -n1 | netselect -s1 -t20 2>/dev/null | awk '{print $2}' | head -n1)
+         echo ""
+          echo "🌐 获取官方镜像列表..."
+          MIRRORS=$(wget -qO- mirrors.ubuntu.com/mirrors.txt)
+          MIRROR_COUNT=$(echo "$MIRRORS" | wc -l)
+          echo "🔍 共获取到 $MIRROR_COUNT 个镜像源，开始测试..."
 
-          # 如果没找到，给个默认值
-          if [ -z "$FASTEST" ]; then
+          echo ""
+          echo "📋 镜像源列表："
+          echo "$MIRRORS" | nl
+
+          echo ""
+          echo "⏱️  正在测试速度（评分越低越好，超时 20 秒）..."
+          # 提取主机名（去掉协议和路径），用于 netselect
+          HOSTS=$(echo "$MIRRORS" | sed -E 's|https?://([^/]+).*|\1|' | sort -u)
+
+          # 测试并保留原始输出
+          RESULT=$(echo "$HOSTS" | xargs -n1 echo | netselect -s 5 -t 20 2>/dev/null)
+
+          if [ -z "$RESULT" ]; then
+            echo "⚠️  所有镜像测试失败，可能受网络限制。"
             FASTEST="archive.ubuntu.com"
+          else
+            echo ""
+            echo "📊 测试结果（评分 越小越快）："
+            echo "$RESULT" | awk '{printf "%4d   %s\n", $1, $2}'
+            
+            FASTEST=$(echo "$RESULT" | head -n1 | awk '{print $2}')
           fi
 
-          # 🌟 直接在界面高亮显示结果
+          echo ""
           echo "✅ 最快的源是: $FASTEST"
 
-          # 可选：在 GitHub Actions Job Summary 里加个醒目显示
-          echo "## 🏆 最快 Ubuntu 镜像源" >> $GITHUB_STEP_SUMMARY
-          echo "**→ \`$FASTEST\`**" >> $GITHUB_STEP_SUMMARY
+          # 写入 Job Summary（GitHub Actions 界面右侧醒目显示）
+          echo "## 🏆 最快 Ubuntu 镜像源测试报告" >> $GITHUB_STEP_SUMMARY
+          echo "**最终选择 → \`$FASTEST\`**" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📊 详细测试结果（评分越低越快）" >> $GITHUB_STEP_SUMSUMMARY
+          if [ -n "$RESULT" ]; then
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            echo "$RESULT" | awk '{printf "%4d   %s\n", $1, $2}' >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+          else
+            echo "> 所有测试失败，使用默认源 \`archive.ubuntu.com\`" >> $GITHUB_STEP_SUMMARY
+          fi
