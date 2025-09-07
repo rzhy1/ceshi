@@ -21,7 +21,7 @@ jobs:
 
           echo ""
           echo "🌐 获取官方镜像列表（强制获取完整列表）..."
-          MIRRORS=$(wget -qO- "http://mirrors.ubuntu.com/mirrors.txt?all=true")
+          MIRRORS=$(wget -qO- "http://mirrors.ubuntu.com/AD.txt")
           MIRROR_COUNT=$(echo "$MIRRORS" | wc -l)
           echo "🔍 共获取到 $MIRROR_COUNT 个镜像源，开始测试..."
 
